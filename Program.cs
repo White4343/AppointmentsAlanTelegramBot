@@ -33,7 +33,7 @@ internal class Program
 
             var isUserExistsInDataBase = await IsUserExistsInDataBase(telegramId);
             var isUserAdmin = await IsUserAdmin(telegramId);
-
+            
             if (message != null && message.Text != null)
             {
                 switch (message.Text.ToLower())
@@ -43,85 +43,85 @@ internal class Program
                         await botClient.SendTextMessageAsync(message.Chat, "Введите любое слово для начала");
                         return;
                     case "/прием":
-                        {
-                            var appointment = await Api.GetAppointmentAsync(telegramId);
+                    {
+                        var appointment = await Api.GetAppointmentAsync(telegramId);
 
-                            if (appointment == null)
-                                await botClient.SendTextMessageAsync(message.Chat,
-                                    "На данный момент приём для Вас не был назначен");
-                            else
-                                await botClient.SendTextMessageAsync(message.Chat,
-                                    $"Дата и время вашего приёма - {appointment}");
+                        if (appointment == null)
+                            await botClient.SendTextMessageAsync(message.Chat,
+                                "На данный момент приём для Вас не был назначен");
+                        else
+                            await botClient.SendTextMessageAsync(message.Chat,
+                                $"Дата и время вашего приёма - {appointment}");
 
-                            userResponses.Remove(chatId);
-                            return;
-                        }
+                        userResponses.Remove(chatId);
+                        return;
+                    }
                     case "/таблица" when !isUserAdmin:
                         await botClient.SendTextMessageAsync(message.Chat, "Вы не админ");
 
                         userResponses.Remove(chatId);
                         return;
                     case "/таблица":
+                    {
+                        string patients = await Api.GetPatientsAsync();
+
+                        if (String.IsNullOrEmpty(patients))
                         {
-                            string patients = await Api.GetPatientsAsync();
+                            await botClient.SendTextMessageAsync(message.Chat,
+                                "На данный момент в БД нет запросов на запись");
+                        }
+                        else
+                        {
+                            var jsonData = JArray.Parse(patients);
 
-                            if (String.IsNullOrEmpty(patients))
+
+                            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+                            using (var package = new ExcelPackage())
                             {
-                                await botClient.SendTextMessageAsync(message.Chat,
-                                    "На данный момент в БД нет запросов на запись");
-                            }
-                            else
-                            {
-                                var jsonData = JArray.Parse(patients);
+                                var worksheet = package.Workbook.Worksheets.Add("Patients");
 
+                                // Set headers
+                                worksheet.Cells[1, 1].Value = "Patient ID";
+                                worksheet.Cells[1, 2].Value = "Diagnosis";
+                                worksheet.Cells[1, 3].Value = "Full Name";
+                                worksheet.Cells[1, 4].Value = "Birth Date";
+                                worksheet.Cells[1, 5].Value = "User's Full Name";
+                                worksheet.Cells[1, 6].Value = "Telephone Number";
+                                worksheet.Cells[1, 7].Value = "City";
+                                worksheet.Cells[1, 8].Value = "Telegram ID";
 
-                                ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
-                                using (var package = new ExcelPackage())
+                                var row = 2;
+
+                                foreach (var item in jsonData)
                                 {
-                                    var worksheet = package.Workbook.Worksheets.Add("Patients");
+                                    worksheet.Cells[row, 1].Value = item["patient"]["patientId"].ToString();
+                                    worksheet.Cells[row, 2].Value = item["patient"]["diagnosis"].ToString();
+                                    worksheet.Cells[row, 3].Value = item["patient"]["fullName"].ToString();
+                                    worksheet.Cells[row, 4].Value = item["patient"]["birthDate"].ToString();
+                                    worksheet.Cells[row, 5].Value = item["user"]["fullName"].ToString();
+                                    worksheet.Cells[row, 6].Value = item["user"]["telephoneNumber"].ToString();
+                                    worksheet.Cells[row, 7].Value = item["user"]["city"].ToString();
+                                    worksheet.Cells[row, 8].Value = item["patient"]["telegramId"].ToString();
 
-                                    // Set headers
-                                    worksheet.Cells[1, 1].Value = "Patient ID";
-                                    worksheet.Cells[1, 2].Value = "Diagnosis";
-                                    worksheet.Cells[1, 3].Value = "Full Name";
-                                    worksheet.Cells[1, 4].Value = "Birth Date";
-                                    worksheet.Cells[1, 5].Value = "User's Full Name";
-                                    worksheet.Cells[1, 6].Value = "Telephone Number";
-                                    worksheet.Cells[1, 7].Value = "City";
-                                    worksheet.Cells[1, 8].Value = "Telegram ID";
+                                    row++;
+                                }
 
-                                    var row = 2;
+                                // Save the Excel package to a stream
+                                using (var stream = new MemoryStream())
+                                {
+                                    package.SaveAs(stream);
+                                    stream.Position = 0;
 
-                                    foreach (var item in jsonData)
-                                    {
-                                        worksheet.Cells[row, 1].Value = item["patient"]["patientId"].ToString();
-                                        worksheet.Cells[row, 2].Value = item["patient"]["diagnosis"].ToString();
-                                        worksheet.Cells[row, 3].Value = item["patient"]["fullName"].ToString();
-                                        worksheet.Cells[row, 4].Value = item["patient"]["birthDate"].ToString();
-                                        worksheet.Cells[row, 5].Value = item["user"]["fullName"].ToString();
-                                        worksheet.Cells[row, 6].Value = item["user"]["telephoneNumber"].ToString();
-                                        worksheet.Cells[row, 7].Value = item["user"]["city"].ToString();
-                                        worksheet.Cells[row, 8].Value = item["patient"]["telegramId"].ToString();
-
-                                        row++;
-                                    }
-
-                                    // Save the Excel package to a stream
-                                    using (var stream = new MemoryStream())
-                                    {
-                                        package.SaveAs(stream);
-                                        stream.Position = 0;
-
-                                        // Send the Excel file to the user
-                                        var iof = new InputFileStream(stream);
-                                        await botClient.SendDocumentAsync(message.Chat.Id, iof);
-                                    }
+                                    // Send the Excel file to the user
+                                    var iof = new InputFileStream(stream);
+                                    await botClient.SendDocumentAsync(message.Chat.Id, iof);
                                 }
                             }
-
-                            userResponses.Remove(chatId);
-                            return;
                         }
+
+                        userResponses.Remove(chatId);
+                        return;
+                    }
                 }
             }
             else
